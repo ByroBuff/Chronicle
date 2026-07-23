@@ -1,5 +1,11 @@
-from database import setup_database
 from collector.collector import collect
+from database import setup_database
 
-setup_database()
-collect()
+
+def main() -> None:
+    setup_database()
+    collect()
+
+
+if __name__ == "__main__":
+    main()

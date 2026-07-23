@@ -1,46 +1,75 @@
+import os
 import sqlite3
+from pathlib import Path
 
 
-def get_connection():
-    return sqlite3.connect("custom_gdelt.db")
+DB_PATH = Path(
+    os.getenv(
+        "DB_PATH",
+        "/data/chronicle.db",
+    )
+)
 
 
-def setup_database():
-    conn = get_connection()
-    cursor = conn.cursor()
+def get_connection() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS articles (
-            article_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            url TEXT UNIQUE NOT NULL,
-            title TEXT,
-            published TEXT,
-            clean_text TEXT
+    conn = sqlite3.connect(
+        str(DB_PATH),
+        timeout=30,
+    )
+
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 30000")
+
+    return conn
+
+
+def setup_database() -> None:
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS articles (
+                article_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT UNIQUE NOT NULL,
+                title TEXT,
+                published TEXT,
+                clean_text TEXT
+            )
+            """
         )
-    """)
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS entities (
-            entity_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            entity_type TEXT NOT NULL,
-            canonical_name TEXT NOT NULL,
-            UNIQUE(entity_type, canonical_name)
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS entities (
+                entity_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entity_type TEXT NOT NULL,
+                canonical_name TEXT NOT NULL,
+                UNIQUE(entity_type, canonical_name)
+            )
+            """
         )
-    """)
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS article_entities (
-            article_id INTEGER,
-            entity_id INTEGER,
-            PRIMARY KEY(article_id, entity_id),
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS article_entities (
+                article_id INTEGER NOT NULL,
+                entity_id INTEGER NOT NULL,
 
-            FOREIGN KEY(article_id)
-                REFERENCES articles(article_id),
+                PRIMARY KEY(article_id, entity_id),
 
-            FOREIGN KEY(entity_id)
-                REFERENCES entities(entity_id)
+                FOREIGN KEY(article_id)
+                    REFERENCES articles(article_id)
+                    ON DELETE CASCADE,
+
+                FOREIGN KEY(entity_id)
+                    REFERENCES entities(entity_id)
+                    ON DELETE CASCADE
+            )
+            """
         )
-    """)
-
-    conn.commit()
-    conn.close()

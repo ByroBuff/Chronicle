@@ -1,0 +1,62 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+    volumes:
+      - redis_data:/data
+
+  collector:
+    build: .
+    restart: unless-stopped
+    command: python -m collector.runner
+
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+      RQ_QUEUE: article_processing
+
+      COLLECT_INTERVAL_SECONDS: "${COLLECT_INTERVAL_SECONDS:-900}"
+      MAX_ENTRIES_PER_FEED: "${MAX_ENTRIES_PER_FEED:-20}"
+      RSS_FEEDS: "${RSS_FEEDS:-}"
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    restart: unless-stopped
+
+    command:
+      - sh
+      - -c
+      - |
+        python -c "from database import setup_database; setup_database()"
+        exec rq worker --url redis://redis:6379/0 article_processing
+
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+      RQ_QUEUE: article_processing
+      DB_PATH: /data/chronicle.db
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    volumes:
+      - sqlite_data:/data
+
+volumes:
+  redis_data:
+  sqlite_data:
