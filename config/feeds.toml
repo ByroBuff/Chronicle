@@ -1,0 +1,39 @@
+[[feeds]]
+id = "guardian-world"
+name = "The Guardian World"
+url = "https://www.theguardian.com/world/rss"
+enabled = true
+category = "world"
+max_entries = 20
+poll_interval_seconds = 900
+tags = ["news", "international"]
+
+[[feeds]]
+id = "bbc-world"
+name = "BBC World"
+url = "https://feeds.bbci.co.uk/news/world/rss.xml"
+enabled = true
+category = "world"
+max_entries = 20
+poll_interval_seconds = 900
+tags = ["news", "international"]
+
+[[feeds]]
+id = "upguard-breaches"
+name = "UpGuard Data Breaches"
+url = "https://www.upguard.com/breaches/rss.xml"
+enabled = true
+category = "data-breach"
+max_entries = 50
+poll_interval_seconds = 1800
+tags = ["cybersecurity", "breaches"]
+
+[[feeds]]
+id = "the-local-spain"
+name = "The Local Spain"
+url = "https://feeds.thelocal.com/rss/es"
+enabled = false
+category = "regional"
+max_entries = 20
+poll_interval_seconds = 1800
+tags = ["spain"]

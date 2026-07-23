@@ -24,13 +24,15 @@ services:
       REDIS_DB: "0"
       RQ_QUEUE: article_processing
 
-      COLLECT_INTERVAL_SECONDS: "${COLLECT_INTERVAL_SECONDS:-900}"
-      MAX_ENTRIES_PER_FEED: "${MAX_ENTRIES_PER_FEED:-20}"
-      RSS_FEEDS: "${RSS_FEEDS:-}"
+      FEEDS_CONFIG_PATH: /config/feeds.toml
+      COLLECTOR_TICK_SECONDS: "60"
 
     depends_on:
       redis:
         condition: service_healthy
+
+    volumes:
+    - ./config:/config:ro
 
   worker:
     build: .

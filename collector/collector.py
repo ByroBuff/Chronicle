@@ -1,80 +1,131 @@
-import os
+import time
 
 import feedparser
 
+from collector.feed_config import FeedConfig, load_feeds
 from redis_queue import article_queue, redis_conn
 from workers.worker import process_article
 
 
-DEFAULT_RSS_FEEDS = [
-    "https://www.theguardian.com/world/rss",
-    "https://feeds.thelocal.com/rss/es",
-    "https://www.upguard.com/breaches/rss.xml",
-    "https://feeds.bbci.co.uk/news/world/rss.xml",
-]
-
-
-def get_rss_feeds() -> list[str]:
-    configured = os.getenv(
-        "RSS_FEEDS",
-        "",
-    ).strip()
-
-    if not configured:
-        return DEFAULT_RSS_FEEDS
-
-    return [
-        url.strip()
-        for url in configured.split(",")
-        if url.strip()
-    ]
-
-
-def collect() -> None:
-    max_entries = int(
-        os.getenv(
-            "MAX_ENTRIES_PER_FEED",
-            "20",
-        )
+def get_last_polled(feed: FeedConfig) -> int | None:
+    value = redis_conn.get(
+        f"feed:last_polled:{feed.feed_id}"
     )
 
-    for feed_url in get_rss_feeds():
-        print(
-            f"Parsing {feed_url}",
-            flush=True,
-        )
+    if value is None:
+        return None
 
-        feed = feedparser.parse(feed_url)
+    return int(value)
 
-        if getattr(feed, "bozo", False):
-            error = getattr(
-                feed,
-                "bozo_exception",
-                "unknown error",
+
+def is_feed_due(
+    feed: FeedConfig,
+    current_time: int,
+) -> bool:
+    last_polled = get_last_polled(feed)
+
+    if last_polled is None:
+        return True
+
+    elapsed = current_time - last_polled
+
+    return elapsed >= feed.poll_interval_seconds
+
+
+def collect_feed(feed: FeedConfig) -> None:
+    current_time = int(time.time())
+
+    if not is_feed_due(feed, current_time):
+        last_polled = get_last_polled(feed)
+
+        if last_polled is not None:
+            remaining = max(
+                0,
+                feed.poll_interval_seconds
+                - (current_time - last_polled),
             )
 
             print(
-                f"Feed warning for {feed_url}: {error}",
+                f"Skipping {feed.name}; "
+                f"next poll in {remaining} seconds",
                 flush=True,
             )
 
-        for entry in feed.entries[:max_entries]:
+        return
+
+    lock_key = f"feed:lock:{feed.feed_id}"
+
+    lock_acquired = redis_conn.set(
+        lock_key,
+        "1",
+        nx=True,
+        ex=300,
+    )
+
+    if not lock_acquired:
+        print(
+            f"Skipping {feed.name}; another collector owns the lock",
+            flush=True,
+        )
+        return
+
+    try:
+        print(
+            f"Parsing {feed.name}: {feed.url}",
+            flush=True,
+        )
+
+        parsed_feed = feedparser.parse(feed.url)
+
+        entry_count = len(parsed_feed.entries)
+
+        print(
+            f"{feed.name} returned {entry_count} entries",
+            flush=True,
+        )
+
+        if getattr(parsed_feed, "bozo", False):
+            error = getattr(
+                parsed_feed,
+                "bozo_exception",
+                "unknown parsing error",
+            )
+
+            print(
+                f"Feed warning for {feed.name}: {error}",
+                flush=True,
+            )
+
+            # Do not record a successful poll when the feed returned
+            # no usable entries.
+            if not parsed_feed.entries:
+                return
+
+        enqueued = 0
+        previously_seen = 0
+        skipped = 0
+
+        for entry in parsed_feed.entries[:feed.max_entries]:
             url = getattr(entry, "link", None)
-            title = getattr(entry, "title", url or "Untitled article")
-            published = getattr(entry, "published", None)
 
             if not url:
-                print(
-                    f"Skipping entry without URL: {title}",
-                    flush=True,
-                )
+                skipped += 1
                 continue
 
+            title = getattr(
+                entry,
+                "title",
+                url,
+            )
+
+            published = getattr(
+                entry,
+                "published",
+                None,
+            )
+
             if redis_conn.sismember("seen_urls", url):
-                print(
-                    f"Already seen: {url}",
-                    flush=True,
-                )
+                previously_seen += 1
                 continue
 
             try:
@@ -86,18 +137,56 @@ def collect() -> None:
                     job_timeout="10m",
                 )
 
-                redis_conn.sadd("seen_urls", url)
-
-                print(
-                    f"Enqueued {job.id}: {title}",
-                    flush=True,
+                # Only mark the URL after RQ accepts the job.
+                redis_conn.sadd(
+                    "seen_urls",
+                    url,
                 )
+
+                enqueued += 1
+
+                print(f"Enqueued {job.id} from {feed.name}: {title}", flush=True)
 
             except Exception as exc:
-                print(
-                    f"Failed to enqueue {url}: {exc}",
-                    flush=True,
-                )
+                print(f"Failed to enqueue {url}: {exc}", flush=True)
+
+        redis_conn.set(f"feed:last_polled:{feed.feed_id}", current_time)
+
+        print(
+            f"Completed {feed.name}: "
+            f"{enqueued} enqueued, "
+            f"{previously_seen} already seen, "
+            f"{skipped} skipped",
+            flush=True,
+        )
+
+    finally:
+        redis_conn.delete(lock_key)
+
+
+def collect() -> None:
+    feeds = load_feeds()
+
+    enabled_feeds = [
+        feed
+        for feed in feeds
+        if feed.enabled
+    ]
+
+    print(
+        f"Loaded {len(enabled_feeds)} enabled feeds "
+        f"out of {len(feeds)} configured feeds",
+        flush=True,
+    )
+
+    for feed in enabled_feeds:
+        try:
+            collect_feed(feed)
+        except Exception as exc:
+            print(
+                f"Collection failed for {feed.name}: {exc}",
+                flush=True,
+            )
 
 
 if __name__ == "__main__":

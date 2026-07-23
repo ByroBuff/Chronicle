@@ -5,19 +5,12 @@ from collector.collector import collect
 
 
 def main() -> None:
-    interval = max(
-        60,
-        int(os.getenv("COLLECT_INTERVAL_SECONDS", "900")),
-    )
+    tick_seconds = max(30, int(os.getenv("COLLECTOR_TICK_SECONDS", "60")))
 
-    run_once = os.getenv(
-        "COLLECT_ONCE",
-        "false",
-    ).lower() in {
-        "1",
-        "true",
-        "yes",
-    }
+    print(
+        f"Collector scheduler running every {tick_seconds} seconds",
+        flush=True,
+    )
 
     while True:
         try:
@@ -28,15 +21,7 @@ def main() -> None:
                 flush=True,
             )
 
-        if run_once:
-            return
-
-        print(
-            f"Next collection pass in {interval} seconds",
-            flush=True,
-        )
-
-        time.sleep(interval)
+        time.sleep(tick_seconds)
 
 
 if __name__ == "__main__":
