@@ -59,6 +59,24 @@ services:
     volumes:
       - sqlite_data:/data
 
+  api:
+    build: .
+    restart: unless-stopped
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8080
+
+    environment:
+      DB_PATH: /data/chronicle.db
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+
+    ports:
+      - "8080:8080"
+
+    volumes:
+      - sqlite_data:/data
+
+    depends_on:
+      - worker
+
 volumes:
   redis_data:
   sqlite_data:

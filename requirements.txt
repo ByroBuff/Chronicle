@@ -3,3 +3,5 @@ redis
 rq
 spacy
 trafilatura
+fastapi
+uvicorn[standard]
