@@ -4,7 +4,7 @@ name = "The Guardian World"
 url = "https://www.theguardian.com/world/rss"
 enabled = true
 category = "world"
-max_entries = 20
+max_entries = 1000
 poll_interval_seconds = 900
 tags = ["news", "international"]
 
@@ -14,7 +14,7 @@ name = "BBC World"
 url = "https://feeds.bbci.co.uk/news/world/rss.xml"
 enabled = true
 category = "world"
-max_entries = 20
+max_entries = 1000
 poll_interval_seconds = 900
 tags = ["news", "international"]
 
@@ -24,7 +24,7 @@ name = "UpGuard Data Breaches"
 url = "https://www.upguard.com/breaches/rss.xml"
 enabled = true
 category = "data-breach"
-max_entries = 50
+max_entries = 1000
 poll_interval_seconds = 1800
 tags = ["cybersecurity", "breaches"]
 
@@ -34,6 +34,6 @@ name = "The Local Spain"
 url = "https://feeds.thelocal.com/rss/es"
 enabled = false
 category = "regional"
-max_entries = 20
+max_entries = 1000
 poll_interval_seconds = 1800
 tags = ["spain"]

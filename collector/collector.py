@@ -4,8 +4,27 @@ import feedparser
 
 from collector.feed_config import FeedConfig, load_feeds
 from redis_queue import article_queue, redis_conn
-from workers.worker import process_article
+from workers.worker import process_article_batch
+from collections.abc import Iterable, Iterator
+from typing import TypeVar
 
+T = TypeVar("T")
+
+def batched(
+    values: Iterable[T],
+    size: int,
+) -> Iterator[list[T]]:
+    batch: list[T] = []
+
+    for value in values:
+        batch.append(value)
+
+        if len(batch) == size:
+            yield batch
+            batch = []
+
+    if batch:
+        yield batch
 
 def get_last_polled(feed: FeedConfig) -> int | None:
     value = redis_conn.get(
@@ -130,7 +149,7 @@ def collect_feed(feed: FeedConfig) -> None:
 
             try:
                 job = article_queue.enqueue(
-                    process_article,
+                    process_article_batch,
                     url,
                     title,
                     published,
@@ -163,30 +182,88 @@ def collect_feed(feed: FeedConfig) -> None:
     finally:
         redis_conn.delete(lock_key)
 
-
-def collect() -> None:
+def get_rss_feeds() -> list[str]:
     feeds = load_feeds()
 
-    enabled_feeds = [
-        feed
+    return [
+        feed.url
         for feed in feeds
         if feed.enabled
     ]
 
-    print(
-        f"Loaded {len(enabled_feeds)} enabled feeds "
-        f"out of {len(feeds)} configured feeds",
-        flush=True,
-    )
+def collect() -> None:
+    pending_articles: list[dict] = []
 
-    for feed in enabled_feeds:
-        try:
-            collect_feed(feed)
-        except Exception as exc:
-            print(
-                f"Collection failed for {feed.name}: {exc}",
-                flush=True,
+    for feed_url in get_rss_feeds():
+        print(
+            f"Parsing {feed_url}",
+            flush=True,
+        )
+
+        feed = feedparser.parse(feed_url)
+
+        print(
+            f"Feed returned {len(feed.entries)} entries",
+            flush=True,
+        )
+
+        for entry in feed.entries:
+            url = getattr(
+                entry,
+                "link",
+                None,
             )
+
+            if not url:
+                continue
+
+            if redis_conn.sismember(
+                "seen_urls",
+                url,
+            ):
+                continue
+
+            pending_articles.append(
+                {
+                    "url": url,
+                    "title": getattr(
+                        entry,
+                        "title",
+                        url,
+                    ),
+                    "published": getattr(
+                        entry,
+                        "published",
+                        None,
+                    ),
+                }
+            )
+
+    for batch in batched(
+        pending_articles,
+        size=5,
+    ):
+        job = article_queue.enqueue(
+            process_article_batch,
+            batch,
+            job_timeout="20m",
+            result_ttl=3600,
+        )
+
+        # Mark URLs only after Redis accepts the batch job.
+        redis_conn.sadd(
+            "seen_urls",
+            *[
+                article["url"]
+                for article in batch
+            ],
+        )
+
+        print(
+            f"Enqueued batch {job.id} "
+            f"with {len(batch)} articles",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

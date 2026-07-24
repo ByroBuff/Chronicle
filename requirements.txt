@@ -3,5 +3,6 @@ redis
 rq
 spacy
 trafilatura
+aiohttp
 fastapi
 uvicorn[standard]

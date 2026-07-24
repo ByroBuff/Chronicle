@@ -42,7 +42,7 @@ services:
       - sh
       - -c
       - |
-        python -c "from database import setup_database; setup_database()"
+        python -c "from database import setup_database; setup_database(); from workers.regex_extractor import get_regex_rules; get_regex_rules()"
         exec rq worker --url redis://redis:6379/0 article_processing
 
     environment:
@@ -51,6 +51,7 @@ services:
       REDIS_DB: "0"
       RQ_QUEUE: article_processing
       DB_PATH: /data/chronicle.db
+      ENTITY_RULES_PATH: /config/entity_rules.toml
 
     depends_on:
       redis:
@@ -58,6 +59,7 @@ services:
 
     volumes:
       - sqlite_data:/data
+      - ./config:/config:ro
 
   api:
     build: .
