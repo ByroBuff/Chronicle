@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from api.database import get_database
 from api.models import (
@@ -44,6 +45,16 @@ app.add_middleware(
 
 
 app.include_router(metrics_router)
+
+
+# Serve the ops dashboard same-origin so its fetches to /api/* need no CORS.
+_static_dir = os.path.join(os.path.dirname(__file__), "static")
+
+app.mount(
+    "/dashboard",
+    StaticFiles(directory=_static_dir, html=True),
+    name="dashboard",
+)
 
 
 Database = Annotated[
