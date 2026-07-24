@@ -70,6 +70,10 @@ services:
     environment:
       DB_PATH: /data/chronicle.db
       CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+      RQ_QUEUE: article_processing
 
     ports:
       - "8080:8080"
@@ -78,7 +82,10 @@ services:
       - sqlite_data:/data
 
     depends_on:
-      - worker
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
 
 volumes:
   redis_data:

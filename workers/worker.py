@@ -1,6 +1,8 @@
 import asyncio
+import time
 from dataclasses import dataclass
 
+import metrics
 from database import get_connection, setup_database
 from workers.entity_extractor import extract_entities_batch
 from workers.scraper import (
@@ -188,6 +190,8 @@ def process_article_batch(
 
     setup_database()
 
+    started_at = time.monotonic()
+
     processed_articles = asyncio.run(
         process_batch_async(article_data)
     )
@@ -196,11 +200,21 @@ def process_article_batch(
         processed_articles
     )
 
+    duration_seconds = time.monotonic() - started_at
+
     result = {
         "received": len(article_data),
         "processed": len(processed_articles),
         "inserted": inserted,
     }
+
+    # received / scraped (processed) / ingested (inserted) throughput.
+    metrics.record_batch(
+        received=len(article_data),
+        scraped=len(processed_articles),
+        ingested=inserted,
+        duration_seconds=duration_seconds,
+    )
 
     print(
         f"Batch complete: {result}",

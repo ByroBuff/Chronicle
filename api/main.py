@@ -14,6 +14,7 @@ from api.models import (
     EntityPage,
     EntitySummary,
 )
+from api.observability import router as metrics_router
 
 
 app = FastAPI(
@@ -40,6 +41,9 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+
+app.include_router(metrics_router)
 
 
 Database = Annotated[
