@@ -37,3 +37,13 @@ category = "regional"
 max_entries = 1000
 poll_interval_seconds = 1800
 tags = ["spain"]
+
+[[feeds]]
+id = "gdelt"
+name = "GDELT"
+url = "http://data.gdeltproject.org/gdeltv3/gal/feed.rss"
+enabled = true
+category = "news"
+max_entries = 100000
+poll_interval_seconds = 900
+tags = ["news", "global"]

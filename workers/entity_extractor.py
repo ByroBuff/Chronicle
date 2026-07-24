@@ -1,5 +1,6 @@
 import os
 from collections.abc import Iterable
+from workers.regex_rules import extract_regex_entities
 
 import spacy
 
@@ -65,6 +66,10 @@ def extract_entities_batch(
     )
 
     return [
-        entities_from_doc(document)
-        for document in documents
+        entities_from_doc(document) | extract_regex_entities(text)
+        for document, text in zip(
+            documents,
+            text_list,
+            strict=True,
+        )
     ]

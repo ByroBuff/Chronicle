@@ -42,8 +42,9 @@ services:
       - sh
       - -c
       - |
-        python -c "from database import setup_database; setup_database(); from workers.regex_extractor import get_regex_rules; get_regex_rules()"
-        exec rq worker --url redis://redis:6379/0 article_processing
+        set -e
+        python -c "from database import setup_database; setup_database()"
+        exec python -m workers.worker_runner
 
     environment:
       REDIS_HOST: redis
