@@ -6,3 +6,7 @@ trafilatura
 aiohttp
 fastapi
 uvicorn[standard]
+sqlite-vec
+fastembed
+argostranslate
+langdetect

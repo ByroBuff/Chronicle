@@ -20,6 +20,11 @@ RUN pip install --upgrade pip \
 
 COPY . .
 
+# Prefetch the embedding model (per config/clustering.toml) at build time
+# so containers never hit the network for it at runtime. Importing the
+# module itself loads/downloads the model.
+RUN python -c "import workers.embeddings"
+
 RUN mkdir -p /data
 
 CMD ["python", "-m", "collector.runner"]

@@ -18,6 +18,7 @@ class ScrapedArticle:
     title: str
     published: str | None
     clean_text: str
+    language: str | None = None
 
 
 async def fetch_html(
@@ -47,6 +48,28 @@ async def fetch_html(
         )
 
         return article, None
+
+
+def _resolve_title(article: ArticleInput, html: str) -> str:
+    """Callers that don't know an article's real title (e.g. manual
+    single-URL ingestion) pass the URL itself as a placeholder. Pull the
+    page's actual title out of its HTML metadata in that case instead of
+    keeping the URL as the displayed/translated title."""
+    if article.title != article.url:
+        return article.title
+
+    try:
+        metadata = trafilatura.extract_metadata(
+            html,
+            default_url=article.url,
+        )
+    except Exception:
+        return article.title
+
+    if metadata and metadata.title:
+        return metadata.title
+
+    return article.title
 
 
 async def extract_article(
@@ -81,9 +104,11 @@ async def extract_article(
 
         return None
 
+    title = await asyncio.to_thread(_resolve_title, article, html)
+
     return ScrapedArticle(
         url=article.url,
-        title=article.title,
+        title=title,
         published=article.published,
         clean_text=clean_text,
     )

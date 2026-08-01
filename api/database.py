@@ -2,6 +2,7 @@ import sqlite3
 from collections.abc import Generator
 
 from database import DB_PATH
+from vector_store import load_vec_extension
 
 
 def create_read_connection() -> sqlite3.Connection:
@@ -17,6 +18,11 @@ def create_read_connection() -> sqlite3.Connection:
     )
 
     connection.row_factory = sqlite3.Row
+
+    # The vec0 virtual tables need the extension loaded on every connection
+    # that touches them, so do this before flipping to query-only.
+    load_vec_extension(connection)
+
     connection.execute("PRAGMA query_only = ON")
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute("PRAGMA busy_timeout = 30000")

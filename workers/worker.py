@@ -1,10 +1,15 @@
 import asyncio
+import dataclasses
 import time
 from dataclasses import dataclass
 
 import metrics
+import vector_store
 from database import get_connection, setup_database
+from workers.clustering import assign_story
+from workers.embeddings import embed_texts
 from workers.entity_extractor import extract_entities_batch
+from workers.language import detect_language, translate_to_english
 from workers.scraper import (
     ArticleInput,
     ScrapedArticle,
@@ -21,13 +26,37 @@ class ProcessedArticle:
     entities: set[tuple[str, str]]
 
 
+def translate_article(article: ScrapedArticle) -> ScrapedArticle:
+    """Detect the article's language and translate it to English so every
+    downstream stage (NER, embeddings, clustering) sees English text."""
+    language = detect_language(article.clean_text) or "en"
+
+    if language == "en":
+        return dataclasses.replace(article, language=language)
+
+    translated_title = (
+        translate_to_english(article.title, language)
+        if article.title
+        else article.title
+    )
+
+    translated_text = translate_to_english(article.clean_text, language)
+
+    return dataclasses.replace(
+        article,
+        title=translated_title,
+        clean_text=translated_text,
+        language=language,
+    )
+
+
 def insert_batch(
     articles: list[ProcessedArticle],
-) -> int:
+) -> list[tuple[int, ProcessedArticle]]:
     if not articles:
-        return 0
+        return []
 
-    inserted = 0
+    inserted: list[tuple[int, ProcessedArticle]] = []
 
     # One connection and one transaction for the entire batch.
     with get_connection() as conn:
@@ -45,15 +74,17 @@ def insert_batch(
                     url,
                     title,
                     published,
-                    clean_text
+                    clean_text,
+                    language
                 )
-                VALUES (?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     article.url,
                     article.title,
                     article.published,
                     article.clean_text,
+                    article.language,
                 ),
             )
 
@@ -66,7 +97,7 @@ def insert_batch(
                 continue
 
             article_id = cursor.lastrowid
-            inserted += 1
+            inserted.append((article_id, processed))
 
             for entity_type, canonical_name in processed.entities:
                 cursor.execute(
@@ -121,6 +152,47 @@ def insert_batch(
     return inserted
 
 
+def embed_and_cluster_batch(
+    inserted: list[tuple[int, ProcessedArticle]],
+) -> None:
+    """Embed each newly inserted article and fold it into a story. Runs as
+    its own step/transaction after insert_batch commits, so an embedding
+    or clustering failure never rolls back the article insert itself."""
+    if not inserted:
+        return
+
+    texts = [
+        processed.article.clean_text
+        for _, processed in inserted
+    ]
+
+    try:
+        embeddings = embed_texts(texts)
+    except Exception as exc:
+        print(
+            f"Embedding failed for batch: {exc}",
+            flush=True,
+        )
+        return
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("BEGIN IMMEDIATE")
+
+        for (article_id, _), embedding in zip(
+            inserted,
+            embeddings,
+            strict=True,
+        ):
+            vector_store.upsert_article_embedding(
+                conn,
+                article_id,
+                embedding,
+            )
+
+            assign_story(conn, article_id, embedding)
+
+
 async def process_batch_async(
     article_data: list[dict],
 ) -> list[ProcessedArticle]:
@@ -146,7 +218,20 @@ async def process_batch_async(
         return []
 
     print(
-        f"Running NLP on {len(scraped_articles)} articles",
+        f"Translating {len(scraped_articles)} articles",
+        flush=True,
+    )
+
+    # Detection/translation is CPU-bound, so keep it off the event loop.
+    translated_articles = await asyncio.gather(
+        *[
+            asyncio.to_thread(translate_article, article)
+            for article in scraped_articles
+        ]
+    )
+
+    print(
+        f"Running NLP on {len(translated_articles)} articles",
         flush=True,
     )
 
@@ -155,7 +240,7 @@ async def process_batch_async(
         extract_entities_batch,
         [
             article.clean_text
-            for article in scraped_articles
+            for article in translated_articles
         ],
     )
 
@@ -165,7 +250,7 @@ async def process_batch_async(
             entities=entities,
         )
         for article, entities in zip(
-            scraped_articles,
+            translated_articles,
             entity_sets,
             strict=True,
         )
@@ -200,19 +285,21 @@ def process_article_batch(
         processed_articles
     )
 
+    embed_and_cluster_batch(inserted)
+
     duration_seconds = time.monotonic() - started_at
 
     result = {
         "received": len(article_data),
         "processed": len(processed_articles),
-        "inserted": inserted,
+        "inserted": len(inserted),
     }
 
     # received / scraped (processed) / ingested (inserted) throughput.
     metrics.record_batch(
         received=len(article_data),
         scraped=len(processed_articles),
-        ingested=inserted,
+        ingested=len(inserted),
         duration_seconds=duration_seconds,
     )
 

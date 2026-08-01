@@ -53,6 +53,7 @@ services:
       RQ_QUEUE: article_processing
       DB_PATH: /data/chronicle.db
       ENTITY_RULES_PATH: /config/entity_rules.toml
+      CLUSTERING_CONFIG_PATH: /config/clustering.toml
 
     depends_on:
       redis:

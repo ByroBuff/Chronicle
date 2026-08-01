@@ -3,445 +3,122 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Chronicle · ingest monitor</title>
+<title>Chronicle · dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-<style>
-  :root{
-    --ink:#0e1420; --panel:#151d2b; --panel-2:#111826; --line:#22303f;
-    --fg:#e6edf3; --muted:#8b98ac; --faint:#5b6676;
-    --scraped:#34d0c3; --ingested:#f0a92b;
-    --ok:#34d399; --warn:#f0a92b; --down:#f2555a;
-    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
-    --sans:"Space Grotesk",system-ui,-apple-system,Segoe UI,sans-serif;
-    --r:10px;
-  }
-  *{box-sizing:border-box}
-  html,body{margin:0}
-  body{
-    background:
-      radial-gradient(1200px 600px at 80% -10%, #16233a 0%, transparent 60%),
-      var(--ink);
-    color:var(--fg); font-family:var(--sans);
-    font-size:14px; line-height:1.4; padding:18px; min-height:100vh;
-    -webkit-font-smoothing:antialiased;
-  }
-  .wrap{max-width:1280px;margin:0 auto;display:grid;gap:14px}
-
-  .eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:600}
-  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
-
-  /* Header */
-  header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
-    border-bottom:1px solid var(--line);padding-bottom:14px}
-  .brand{display:flex;align-items:baseline;gap:10px;margin-right:auto}
-  .brand h1{font-size:19px;font-weight:700;letter-spacing:.02em;margin:0}
-  .brand span{color:var(--muted);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
-  .status{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px}
-  .dot{width:9px;height:9px;border-radius:50%;background:var(--faint);box-shadow:0 0 0 0 rgba(52,211,153,.5)}
-  .status.up .dot{background:var(--ok)}
-  .status.down .dot{background:var(--down)}
-  @media (prefers-reduced-motion: no-preference){
-    .status.up .dot{animation:pulse 2.4s ease-out infinite}
-  }
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.45)}70%{box-shadow:0 0 0 8px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
-  select,button{font-family:var(--mono);font-size:12.5px;color:var(--fg);
-    background:var(--panel);border:1px solid var(--line);border-radius:8px;
-    padding:7px 10px;cursor:pointer}
-  select:focus-visible,button:focus-visible,.chip:focus-visible{outline:2px solid var(--scraped);outline-offset:2px}
-  button.toggle[aria-pressed="true"]{color:var(--warn);border-color:var(--warn)}
-
-  .panel{background:linear-gradient(180deg,var(--panel) 0%,var(--panel-2) 100%);
-    border:1px solid var(--line);border-radius:var(--r);padding:16px}
-  .panel h2{margin:0 0 12px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;
-    color:var(--muted);font-weight:600;display:flex;align-items:center;gap:10px}
-
-  /* Hero chart */
-  .legend{margin-left:auto;display:flex;gap:14px;align-items:center;text-transform:none;letter-spacing:0}
-  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
-  .legend .s{background:var(--scraped)} .legend .i{background:var(--ingested)}
-  .legend .a{background:repeating-linear-gradient(45deg,var(--down),var(--down) 2px,transparent 2px,transparent 5px);border:1px solid rgba(242,85,90,.5)}
-  .legend span{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
-  .chartbox{position:relative;width:100%;height:260px}
-  svg.chart{width:100%;height:100%;display:block}
-  .chartfoot{display:flex;flex-wrap:wrap;gap:22px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
-  .chartfoot div{display:flex;flex-direction:column;gap:2px}
-  .chartfoot .k{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
-  .chartfoot .v{font-family:var(--mono);font-size:19px;font-weight:600}
-
-  /* KPI strip */
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
-  .kpi{background:linear-gradient(180deg,var(--panel) 0%,var(--panel-2) 100%);
-    border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;
-    position:relative;overflow:hidden}
-  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line)}
-  .kpi.s::before{background:var(--scraped)} .kpi.i::before{background:var(--ingested)}
-  .kpi.q::before{background:var(--muted)} .kpi.w::before{background:var(--ok)}
-  .kpi .k{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
-  .kpi .v{font-family:var(--mono);font-size:30px;font-weight:600;margin-top:6px;line-height:1}
-  .kpi .sub{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:6px}
-
-  /* Two column */
-  .cols{display:grid;grid-template-columns:1.4fr 1fr;gap:14px}
-  .worker{display:grid;grid-template-columns:auto 1fr auto;gap:6px 12px;align-items:center;
-    padding:10px 0;border-bottom:1px dashed var(--line)}
-  .worker:last-child{border-bottom:0}
-  .badge{font-family:var(--mono);font-size:10.5px;padding:2px 8px;border-radius:999px;
-    border:1px solid var(--line);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
-  .badge.busy{color:var(--scraped);border-color:rgba(52,208,195,.5)}
-  .badge.idle{color:var(--muted)}
-  .badge.stale{color:var(--down);border-color:rgba(242,85,90,.5)}
-  .wname{font-family:var(--mono);font-size:13px}
-  .wmeta{grid-column:2 / -1;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
-  .qrow{display:flex;justify-content:space-between;align-items:baseline;
-    padding:11px 0;border-bottom:1px dashed var(--line)}
-  .qrow:last-child{border-bottom:0}
-  .qrow .k{color:var(--muted);font-size:12.5px}
-  .qrow .v{font-family:var(--mono);font-size:20px;font-weight:600}
-  .qrow.bad .v{color:var(--down)}
-
-  /* Lists */
-  .art{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:baseline;
-    padding:9px 0;border-bottom:1px dashed var(--line)}
-  .art:last-child{border-bottom:0}
-  .art .id{font-family:var(--mono);font-size:11.5px;color:var(--faint)}
-  .art .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .art a{color:var(--fg);text-decoration:none}
-  .art a:hover{color:var(--scraped)}
-  .art .d{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
-
-  .chips{display:flex;gap:7px;flex-wrap:wrap;margin-left:auto;text-transform:none;letter-spacing:0}
-  .chip{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:999px;
-    background:transparent;border:1px solid var(--line);color:var(--muted)}
-  .chip[aria-pressed="true"]{color:var(--ink);background:var(--scraped);border-color:var(--scraped)}
-  .ents{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px 18px}
-  .ent{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line)}
-  .ent .type{font-family:var(--mono);font-size:9.5px;color:var(--faint);letter-spacing:.1em}
-  .ent .name{font-family:var(--mono);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .ent .cnt{font-family:var(--mono);font-size:12.5px;color:var(--scraped)}
-  .empty{color:var(--faint);font-family:var(--mono);font-size:12.5px;padding:8px 0}
-
-  footer{display:flex;gap:18px;flex-wrap:wrap;color:var(--faint);font-family:var(--mono);
-    font-size:11px;border-top:1px solid var(--line);padding-top:12px}
-
-  @media (max-width:860px){
-    .kpis{grid-template-columns:repeat(2,1fr)}
-    .cols{grid-template-columns:1fr}
-  }
-</style>
+<link rel="stylesheet" href="/dashboard/style.css" />
 </head>
 <body>
 <div class="wrap">
 
   <header>
     <div class="brand">
-      <h1>CHRONICLE</h1><span>ingest monitor</span>
+      <h1>CHRONICLE</h1><span>dashboard</span>
     </div>
-    <div class="status" id="status"><span class="dot"></span><span id="statusText">connecting…</span></div>
-    <label class="eyebrow" for="window" style="align-self:center">window</label>
-    <select id="window" aria-label="Chart time window">
-      <option value="30,3">30 seconds</option>
-      <option value="120,10" selected>2 minutes</option>
-      <option value="300,15">5 minutes</option>
-      <option value="900,30">15 minutes</option>
-    </select>
-    <button class="toggle" id="pause" aria-pressed="false" aria-label="Pause live updates">⏸ pause</button>
+    <nav class="tabs" role="tablist">
+      <button class="tab" type="button" data-view="data" role="tab" aria-selected="true">Data</button>
+      <button class="tab" type="button" data-view="pipeline" role="tab" aria-selected="false">Pipeline</button>
+    </nav>
+    <div class="header-right">
+      <div class="status" id="status"><span class="dot"></span><span id="statusText">connecting…</span></div>
+      <button class="toggle" id="pause" aria-pressed="false" aria-label="Pause live updates">⏸ pause</button>
+    </div>
   </header>
 
-  <!-- HERO -->
-  <section class="panel">
-    <h2>Throughput · articles per second
-      <span class="legend">
-        <span><i class="s"></i>scraped</span>
-        <span><i class="i"></i>ingested</span>
-        <span><i class="a"></i>attrition</span>
-      </span>
-    </h2>
-    <div class="chartbox">
-      <svg class="chart" id="chart" preserveAspectRatio="none" role="img" aria-label="Scraped versus ingested throughput"></svg>
-    </div>
-    <div class="chartfoot">
-      <div><span class="k">scraped / s</span><span class="v" id="fScraped" style="color:var(--scraped)">–</span></div>
-      <div><span class="k">ingested / s</span><span class="v" id="fIngested" style="color:var(--ingested)">–</span></div>
-      <div><span class="k">attrition</span><span class="v" id="fLoss">–</span></div>
-      <div><span class="k">avg batch</span><span class="v" id="fBatch">–</span></div>
-      <div><span class="k">batches / s</span><span class="v" id="fBps">–</span></div>
-    </div>
-  </section>
+  <!-- ============================================================ DATA -->
+  <div class="view" id="view-data">
 
-  <!-- KPIs -->
-  <section class="kpis">
-    <div class="kpi i"><div class="k">Ingested · total</div><div class="v num" id="kIngested">–</div><div class="sub" id="kScraped">scraped –</div></div>
-    <div class="kpi q"><div class="k">Queue depth</div><div class="v num" id="kQueue">–</div><div class="sub" id="kRunning">running –</div></div>
-    <div class="kpi w"><div class="k">Workers</div><div class="v num" id="kWorkers">–</div><div class="sub" id="kWorkerSub">busy – · idle –</div></div>
-    <div class="kpi s"><div class="k">Scrape success</div><div class="v num" id="kSuccess">–</div><div class="sub" id="kFailed">failed –</div></div>
-  </section>
+    <section class="panel">
+      <h2>Ingest a URL</h2>
+      <form class="ingest-form" id="ingestForm">
+        <input type="url" id="ingestUrl" placeholder="https://example.com/some-article" required />
+        <button type="submit" id="ingestBtn">Ingest</button>
+      </form>
+      <div class="ingest-msg" id="ingestMsg"></div>
+    </section>
 
-  <!-- Workers + Queue -->
-  <section class="cols">
-    <div class="panel">
-      <h2>Workers</h2>
-      <div id="workers"><div class="empty">waiting for data…</div></div>
-    </div>
-    <div class="panel">
-      <h2>Queue · article_processing</h2>
-      <div id="queue"><div class="empty">waiting for data…</div></div>
-    </div>
-  </section>
+    <section class="panel">
+      <h2>Live article feed
+        <input class="search-input" type="search" id="articleSearch" placeholder="search title or text…" />
+      </h2>
+      <div id="liveArticles"><div class="empty">waiting for data…</div></div>
+      <div class="empty spaced" id="dataUpdated"></div>
+    </section>
 
-  <!-- Articles -->
-  <section class="panel">
-    <h2>Recent articles</h2>
-    <div id="articles"><div class="empty">waiting for data…</div></div>
-  </section>
+    <section class="cols">
+      <div class="panel">
+        <h2>Stories <span class="eyebrow">clustered coverage</span></h2>
+        <div id="stories"><div class="empty">waiting for data…</div></div>
+      </div>
+      <div class="panel">
+        <h2>Top entities
+          <span class="chips" id="chips"></span>
+        </h2>
+        <div class="ents" id="entities"><div class="empty">waiting for data…</div></div>
+      </div>
+    </section>
 
-  <!-- Entities -->
-  <section class="panel">
-    <h2>Top entities
-      <span class="chips" id="chips"></span>
-    </h2>
-    <div class="ents" id="entities"><div class="empty">waiting for data…</div></div>
-  </section>
+  </div>
+
+  <!-- ======================================================== PIPELINE -->
+  <div class="view" id="view-pipeline" hidden>
+
+    <section class="panel">
+      <h2>Throughput · articles per second
+        <span class="legend">
+          <span><i class="s"></i>scraped</span>
+          <span><i class="i"></i>ingested</span>
+          <span><i class="a"></i>attrition</span>
+        </span>
+        <select class="window-select" id="pipelineWindow" aria-label="Chart time window">
+          <option value="30,3">30 seconds</option>
+          <option value="120,10" selected>2 minutes</option>
+          <option value="300,15">5 minutes</option>
+          <option value="900,30">15 minutes</option>
+        </select>
+      </h2>
+      <div class="chartbox">
+        <svg class="chart" id="chart" preserveAspectRatio="none" role="img" aria-label="Scraped versus ingested throughput"></svg>
+      </div>
+      <div class="chartfoot">
+        <div><span class="k">scraped / s</span><span class="v" id="fScraped" style="color:var(--scraped)">–</span></div>
+        <div><span class="k">ingested / s</span><span class="v" id="fIngested" style="color:var(--ingested)">–</span></div>
+        <div><span class="k">attrition</span><span class="v" id="fLoss">–</span></div>
+        <div><span class="k">avg batch</span><span class="v" id="fBatch">–</span></div>
+        <div><span class="k">batches / s</span><span class="v" id="fBps">–</span></div>
+      </div>
+    </section>
+
+    <section class="kpis">
+      <div class="kpi i"><div class="k">Ingested · total</div><div class="v num" id="kIngested">–</div><div class="sub" id="kScraped">scraped –</div></div>
+      <div class="kpi q"><div class="k">Queue depth</div><div class="v num" id="kQueue">–</div><div class="sub" id="kRunning">running –</div></div>
+      <div class="kpi w"><div class="k">Workers</div><div class="v num" id="kWorkers">–</div><div class="sub" id="kWorkerSub">busy – · idle –</div></div>
+      <div class="kpi s"><div class="k">Scrape success</div><div class="v num" id="kSuccess">–</div><div class="sub" id="kFailed">failed –</div></div>
+    </section>
+
+    <section class="cols">
+      <div class="panel">
+        <h2>Workers</h2>
+        <div id="workers"><div class="empty">waiting for data…</div></div>
+      </div>
+      <div class="panel">
+        <h2>Queue · article_processing</h2>
+        <div id="queue"><div class="empty">waiting for data…</div></div>
+      </div>
+    </section>
+
+    <div class="empty" id="fGenerated"></div>
+
+  </div>
 
   <footer>
     <span id="fUpdated">last update –</span>
-    <span id="fGenerated"></span>
-    <span>fast poll 3s · lists 15s</span>
+    <span>data 5s · pipeline 3s</span>
   </footer>
 </div>
 
-<script>
-const $ = id => document.getElementById(id);
-const SVGNS = "http://www.w3.org/2000/svg";
-const state = {
-  window: 120, bucket: 10, paused: false,
-  entityType: null, up: false,
-  fastTimer: null, slowTimer: null,
-};
-const ENTITY_TYPES = ["ALL","EMAIL","CVE","IP_ADDRESS","SHA256","PERSON","LOCATION","ORG"];
-
-const fmt = n => (n ?? 0).toLocaleString();
-const pct = f => (f == null ? "–" : Math.round(f * 100) + "%");
-const perSec = n => (n == null ? "–" : n.toFixed(1) + "/s");
-
-async function getJSON(path){
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 8000);
-  try{
-    const r = await fetch(path, {signal: ctrl.signal, cache: "no-store"});
-    if(!r.ok) throw new Error("HTTP " + r.status);
-    return await r.json();
-  } finally { clearTimeout(t); }
-}
-
-function setStatus(up, text){
-  state.up = up;
-  const el = $("status");
-  el.className = "status " + (up ? "up" : "down");
-  $("statusText").textContent = text;
-}
-
-/* ---- hero chart (hand-rolled SVG) ---- */
-function renderChart(series){
-  const svg = $("chart");
-  svg.innerHTML = "";
-  const W = 1000, H = 260, padL = 44, padR = 12, padT = 14, padB = 22;
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  const n = series.length;
-  const maxRate = Math.max(0.001, ...series.flatMap(b => [b.scraped_per_second, b.ingested_per_second]));
-  const niceMax = maxRate <= 1 ? Math.ceil(maxRate*10)/10 : Math.ceil(maxRate);
-  const x = i => padL + (n <= 1 ? 0 : (i/(n-1))*(W-padL-padR));
-  const y = v => padT + (1 - v/niceMax)*(H-padT-padB);
-
-  const mk = (tag, attrs) => { const e = document.createElementNS(SVGNS, tag);
-    for(const k in attrs) e.setAttribute(k, attrs[k]); return e; };
-
-  // hatch pattern for attrition band
-  const defs = mk("defs",{});
-  defs.innerHTML = `<pattern id="hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
-    <rect width="6" height="6" fill="rgba(242,85,90,0.05)"/>
-    <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(242,85,90,0.35)" stroke-width="1.2"/></pattern>`;
-  svg.appendChild(defs);
-
-  // gridlines + y labels (0, mid, max)
-  [0, niceMax/2, niceMax].forEach(v => {
-    svg.appendChild(mk("line",{x1:padL,y1:y(v),x2:W-padR,y2:y(v),stroke:"#22303f","stroke-width":1}));
-    const lab = mk("text",{x:padL-8,y:y(v)+3,fill:"#5b6676","font-size":11,"text-anchor":"end","font-family":"IBM Plex Mono, monospace"});
-    lab.textContent = (niceMax<=1 ? v.toFixed(1) : Math.round(v));
-    svg.appendChild(lab);
-  });
-
-  if(n === 0) return;
-
-  const sPts = series.map((b,i) => [x(i), y(b.scraped_per_second)]);
-  const iPts = series.map((b,i) => [x(i), y(b.ingested_per_second)]);
-
-  // attrition band: polygon between scraped (top) and ingested (bottom)
-  const band = sPts.map(p=>p.join(",")).join(" ") + " " +
-               iPts.slice().reverse().map(p=>p.join(",")).join(" ");
-  svg.appendChild(mk("polygon",{points:band,fill:"url(#hatch)"}));
-
-  // ingested area (subtle fill)
-  const iArea = `${padL},${y(0)} ` + iPts.map(p=>p.join(",")).join(" ") + ` ${x(n-1)},${y(0)}`;
-  svg.appendChild(mk("polygon",{points:iArea,fill:"rgba(240,169,43,0.10)"}));
-
-  const line = (pts,color) => mk("polyline",{points:pts.map(p=>p.join(",")).join(" "),
-    fill:"none",stroke:color,"stroke-width":2,"stroke-linejoin":"round","stroke-linecap":"round"});
-  svg.appendChild(line(iPts, getCSS("--ingested")));
-  svg.appendChild(line(sPts, getCSS("--scraped")));
-
-  // last-point dots
-  [[sPts.at(-1),getCSS("--scraped")],[iPts.at(-1),getCSS("--ingested")]].forEach(([p,c])=>{
-    svg.appendChild(mk("circle",{cx:p[0],cy:p[1],r:3.2,fill:c}));
-  });
-}
-function getCSS(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
-
-/* ---- renderers ---- */
-function renderSnapshot(d){
-  const t = d.throughput, tot = d.totals, q = d.queue, w = d.workers;
-  $("fScraped").textContent = perSec(t.scraped_per_second);
-  $("fIngested").textContent = perSec(t.ingested_per_second);
-  const inWin = t.totals_in_window;
-  const loss = inWin.scraped ? Math.max(0,(inWin.scraped - inWin.ingested)/inWin.scraped) : 0;
-  $("fLoss").textContent = pct(loss);
-  $("fLoss").style.color = loss > 0.5 ? "var(--down)" : loss > 0.2 ? "var(--warn)" : "var(--fg)";
-  $("fBatch").textContent = t.avg_batch_seconds ? t.avg_batch_seconds.toFixed(2)+"s" : "–";
-  $("fBps").textContent = perSec(t.batches_per_second);
-
-  $("kIngested").textContent = fmt(tot.ingested);
-  $("kScraped").textContent = "scraped " + fmt(tot.scraped);
-  $("kQueue").textContent = fmt(q.queued);
-  $("kRunning").textContent = "running " + fmt(q.started);
-  $("kWorkers").textContent = fmt(w.total);
-  $("kWorkerSub").textContent = `busy ${w.busy} · idle ${w.idle}`;
-  $("kSuccess").textContent = pct(tot.scrape_success_rate);
-  $("kFailed").textContent = "failed " + fmt(q.failed);
-  $("kFailed").style.color = q.failed > 0 ? "var(--down)" : "var(--muted)";
-
-  renderWorkers(w.workers);
-  renderQueue(q);
-  $("fGenerated").textContent = "snapshot " + new Date(d.generated_at).toLocaleTimeString();
-}
-
-function renderWorkers(list){
-  const el = $("workers");
-  if(!list || !list.length){ el.innerHTML = `<div class="empty">no workers attached to the queue — start one with <span style="color:var(--fg)">docker compose up -d worker</span></div>`; return; }
-  el.innerHTML = list.map(w => {
-    const stale = w.heartbeat_age_seconds != null && w.heartbeat_age_seconds > 60;
-    const cls = stale ? "stale" : (w.state === "busy" ? "busy" : "idle");
-    const label = stale ? "stale" : w.state;
-    const hb = w.heartbeat_age_seconds != null ? `${w.heartbeat_age_seconds}s ago` : "–";
-    const job = w.current_job_id ? `job ${w.current_job_id.slice(0,8)}` : "no active job";
-    return `<div class="worker">
-      <span class="badge ${cls}">${label}</span>
-      <span class="wname">${esc(w.name)}</span>
-      <span class="num" style="color:var(--muted);font-size:11.5px">▲${w.working_time_seconds}s</span>
-      <span class="wmeta">${job} · ok ${w.successful_jobs} · fail ${w.failed_jobs} · heartbeat ${hb}</span>
-    </div>`;
-  }).join("");
-}
-
-function renderQueue(q){
-  const rows = [
-    ["Queued", q.queued, false],
-    ["Running", q.started, false],
-    ["Finished (rolling)", q.finished, false],
-    ["Failed", q.failed, q.failed > 0],
-  ];
-  $("queue").innerHTML = rows.map(([k,v,bad]) =>
-    `<div class="qrow ${bad?'bad':''}"><span class="k">${k}</span><span class="v num">${fmt(v)}</span></div>`
-  ).join("");
-}
-
-function renderArticles(d){
-  const el = $("articles");
-  if(!d.items || !d.items.length){ el.innerHTML = `<div class="empty">no articles ingested yet — enqueue some and they'll appear here</div>`; return; }
-  el.innerHTML = d.items.map(a => {
-    const title = a.title && a.title !== a.url ? a.title : a.url;
-    const when = a.published ? esc(a.published) : "—";
-    return `<div class="art">
-      <span class="id">#${a.article_id}</span>
-      <span class="t"><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(title)}</a></span>
-      <span class="d">${when}</span>
-    </div>`;
-  }).join("");
-}
-
-function renderEntities(d){
-  const el = $("entities");
-  if(!d.items || !d.items.length){ el.innerHTML = `<div class="empty">no entities for this filter yet</div>`; return; }
-  el.innerHTML = d.items.map(e =>
-    `<div class="ent">
-      <span class="name" title="${esc(e.canonical_name)}"><span class="type">${esc(e.entity_type)}</span> ${esc(e.canonical_name)}</span>
-      <span class="cnt">×${e.article_count ?? 0}</span>
-    </div>`
-  ).join("");
-}
-
-function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c =>
-  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-
-/* ---- polling ---- */
-async function fast(){
-  if(state.paused) return;
-  try{
-    const [snap, ts] = await Promise.all([
-      getJSON(`/api/metrics?window=${state.window}`),
-      getJSON(`/api/metrics/timeseries?window=${state.window}&bucket=${state.bucket}`),
-    ]);
-    renderSnapshot(snap);
-    renderChart(ts.series);
-    setStatus(true, "live");
-    $("fUpdated").textContent = "last update " + new Date().toLocaleTimeString();
-  }catch(e){
-    setStatus(false, "disconnected — retrying");
-  }
-}
-async function slow(){
-  if(state.paused) return;
-  try{
-    const q = state.entityType ? `&entity_type=${state.entityType}` : "";
-    const [arts, ents] = await Promise.all([
-      getJSON(`/api/articles?limit=10`),
-      getJSON(`/api/entities?limit=18${q}`),
-    ]);
-    renderArticles(arts);
-    renderEntities(ents);
-  }catch(e){ /* keep last-good; fast loop owns the status pill */ }
-}
-
-/* ---- controls ---- */
-function buildChips(){
-  const box = $("chips");
-  box.innerHTML = "";
-  ENTITY_TYPES.forEach((t,idx) => {
-    const b = document.createElement("button");
-    b.className = "chip"; b.textContent = t.toLowerCase();
-    const active = (t === "ALL" && !state.entityType) || t === state.entityType;
-    b.setAttribute("aria-pressed", active ? "true" : "false");
-    b.onclick = () => { state.entityType = (t === "ALL") ? null : t; buildChips(); slow(); };
-    box.appendChild(b);
-  });
-}
-
-$("window").addEventListener("change", e => {
-  const [w,b] = e.target.value.split(",").map(Number);
-  state.window = w; state.bucket = b; fast();
-});
-$("pause").addEventListener("click", e => {
-  state.paused = !state.paused;
-  e.target.setAttribute("aria-pressed", state.paused ? "true" : "false");
-  e.target.textContent = state.paused ? "▶ resume" : "⏸ pause";
-  if(!state.paused){ fast(); slow(); }
-  else setStatus(state.up, "paused");
-});
-
-buildChips();
-fast(); slow();
-state.fastTimer = setInterval(fast, 3000);
-state.slowTimer = setInterval(slow, 15000);
-</script>
+<script src="/dashboard/common.js"></script>
+<script src="/dashboard/app.js"></script>
 </body>
 </html>

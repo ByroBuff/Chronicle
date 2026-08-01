@@ -4,7 +4,9 @@ from redis import Redis
 from rq import Queue, Worker
 
 # Import these before RQ forks the job process.
-# This loads spaCy and the model once in the parent worker.
+# This loads spaCy, the embedding model, and Argos Translate once in the
+# parent worker instead of once per forked job.
+import workers.embeddings
 import workers.entity_extractor
 import workers.worker
 

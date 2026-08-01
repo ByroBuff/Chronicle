@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chronicle · article</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/dashboard/style.css" />
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <h1>CHRONICLE</h1><span>article</span>
+    </div>
+    <a class="back-link" href="/dashboard/">← back to dashboard</a>
+  </header>
+
+  <section class="panel" id="articleHeader">
+    <div class="empty">loading…</div>
+  </section>
+
+  <section class="panel">
+    <h2>Full text</h2>
+    <div class="article-body" id="articleBody"></div>
+  </section>
+
+  <section class="cols">
+    <div class="panel">
+      <h2>Entities</h2>
+      <div class="ents" id="articleEntities"><div class="empty">loading…</div></div>
+    </div>
+    <div class="panel">
+      <h2>Similar articles</h2>
+      <div id="similarArticles"><div class="empty">loading…</div></div>
+    </div>
+  </section>
+
+  <section class="panel" id="storySection" hidden>
+    <h2>Same story
+      <span class="eyebrow" id="storyMeta"></span>
+      <a class="back-link story-link" id="storyLink" href="#">view full story →</a>
+    </h2>
+    <div id="storyArticles"></div>
+  </section>
+
+</div>
+
+<script src="/dashboard/common.js"></script>
+<script src="/dashboard/article.js"></script>
+</body>
+</html>

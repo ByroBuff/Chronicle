@@ -4,9 +4,13 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from starlette.responses import Response
+
 from api.database import get_database
+from api.ingest import router as ingest_router
 from api.models import (
     ArticleDetail,
     ArticlePage,
@@ -16,6 +20,7 @@ from api.models import (
     EntitySummary,
 )
 from api.observability import router as metrics_router
+from api.similarity import router as similarity_router
 
 
 app = FastAPI(
@@ -39,20 +44,72 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=False,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
 
 app.include_router(metrics_router)
+app.include_router(similarity_router)
+app.include_router(ingest_router)
 
 
 # Serve the ops dashboard same-origin so its fetches to /api/* need no CORS.
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 
+
+class NoCacheStaticFiles(StaticFiles):
+    """Force browsers to revalidate on every request instead of trusting a
+    heuristic freshness lifetime, so a redeployed dashboard is never served
+    from a stale cached copy of an old, incompatible index.html/app.js pair.
+    """
+
+    def file_response(self, *args: object, **kwargs: object) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+# Registered before the StaticFiles mount below: Starlette's router takes
+# the first matching route, and a Mount claims its whole prefix, so this
+# explicit route must come first for the SPA-style article page to win
+# over "file not found" from the static handler.
+@app.get(
+    "/dashboard/article/{article_id}",
+    include_in_schema=False,
+)
+def dashboard_article_page(article_id: int) -> FileResponse:
+    return FileResponse(
+        os.path.join(_static_dir, "article.html"),
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get(
+    "/dashboard/story/{story_id}",
+    include_in_schema=False,
+)
+def dashboard_story_page(story_id: int) -> FileResponse:
+    return FileResponse(
+        os.path.join(_static_dir, "story.html"),
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get(
+    "/dashboard/entity/{entity_id}",
+    include_in_schema=False,
+)
+def dashboard_entity_page(entity_id: int) -> FileResponse:
+    return FileResponse(
+        os.path.join(_static_dir, "entity.html"),
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 app.mount(
     "/dashboard",
-    StaticFiles(directory=_static_dir, html=True),
+    NoCacheStaticFiles(directory=_static_dir, html=True),
     name="dashboard",
 )
 
@@ -138,6 +195,8 @@ def list_articles(
             url,
             title,
             published,
+            language,
+            story_id,
             SUBSTR(
                 REPLACE(clean_text, CHAR(10), ' '),
                 1,
@@ -182,7 +241,9 @@ def get_article(
             url,
             title,
             published,
-            clean_text
+            clean_text,
+            language,
+            story_id
         FROM articles
         WHERE article_id = ?
         """,
@@ -294,6 +355,39 @@ def list_entities(
 
 
 @app.get(
+    "/api/entities/{entity_id}",
+    response_model=EntitySummary,
+)
+def get_entity(
+    entity_id: int,
+    database: Database,
+) -> EntitySummary:
+    row = database.execute(
+        """
+        SELECT
+            entities.entity_id,
+            entities.entity_type,
+            entities.canonical_name,
+            COUNT(article_entities.article_id) AS article_count
+        FROM entities
+        LEFT JOIN article_entities
+            ON article_entities.entity_id = entities.entity_id
+        WHERE entities.entity_id = ?
+        GROUP BY entities.entity_id
+        """,
+        (entity_id,),
+    ).fetchone()
+
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Entity not found",
+        )
+
+    return EntitySummary(**dict(row))
+
+
+@app.get(
     "/api/entities/{entity_id}/articles",
     response_model=ArticlePage,
 )
@@ -334,6 +428,8 @@ def list_entity_articles(
             articles.url,
             articles.title,
             articles.published,
+            articles.language,
+            articles.story_id,
             SUBSTR(
                 REPLACE(articles.clean_text, CHAR(10), ' '),
                 1,

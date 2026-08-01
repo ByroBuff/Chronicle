@@ -1,0 +1,12 @@
+[embeddings]
+model_name = "BAAI/bge-small-en-v1.5"
+
+[clustering]
+# Cosine similarity an article's embedding must reach against a story's
+# centroid to be folded into that story instead of starting a new one.
+similarity_threshold = 0.82
+
+# Only compare against stories whose centroid was last updated within this
+# many days. Keeps clustering bounded and stops unrelated articles months
+# apart from gluing together just because of generic wording.
+recency_window_days = 14
