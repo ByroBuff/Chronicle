@@ -1,11 +1,12 @@
 const storyId = location.pathname.split("/").filter(Boolean).pop();
 
 function renderHeader(s){
-  document.title = `Chronicle · story #${s.story_id}`;
+  const title = s.label || `Story #${s.story_id}`;
+  document.title = `Chronicle · ${title}`;
 
   $("storyHeader").innerHTML = `
     <div class="eyebrow">story #${esc(s.story_id)}</div>
-    <h1 class="article-title">Story #${esc(s.story_id)}</h1>
+    <h1 class="article-title">${esc(title)}</h1>
     <div class="article-meta">
       <span>${s.article_count} article${s.article_count === 1 ? "" : "s"}</span>
       <span>created ${new Date(s.created_at).toLocaleString()}</span>

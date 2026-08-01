@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 import vector_store
 from api.database import get_database
+from api.queries import ARTICLE_SUMMARY_COLUMNS, ARTICLE_SUMMARY_JOIN
 from api.models import (
     ArticleSummary,
     SimilarArticle,
@@ -30,21 +31,6 @@ Database = Annotated[
     sqlite3.Connection,
     Depends(get_database),
 ]
-
-
-_ARTICLE_SUMMARY_COLUMNS = """
-    article_id,
-    url,
-    title,
-    published,
-    language,
-    story_id,
-    SUBSTR(
-        REPLACE(clean_text, CHAR(10), ' '),
-        1,
-        300
-    ) AS excerpt
-"""
 
 
 def _article_exists(
@@ -72,9 +58,10 @@ def _fetch_article_summaries(
     rows = database.execute(
         f"""
         SELECT
-            {_ARTICLE_SUMMARY_COLUMNS}
+            {ARTICLE_SUMMARY_COLUMNS}
         FROM articles
-        WHERE article_id IN ({placeholders})
+        {ARTICLE_SUMMARY_JOIN}
+        WHERE articles.article_id IN ({placeholders})
         """,
         article_ids,
     ).fetchall()
@@ -148,7 +135,15 @@ def get_article_story(
     database: Database,
 ) -> StoryDetail:
     row = database.execute(
-        "SELECT story_id FROM articles WHERE article_id = ?",
+        """
+        SELECT
+            articles.story_id,
+            stories.article_count
+        FROM articles
+        LEFT JOIN stories
+            ON stories.story_id = articles.story_id
+        WHERE articles.article_id = ?
+        """,
         (article_id,),
     ).fetchone()
 
@@ -158,7 +153,9 @@ def get_article_story(
             detail="Article not found",
         )
 
-    if row["story_id"] is None:
+    # A story only becomes a real, browsable story once a second article
+    # joins it — a lone article "story" is just clustering bookkeeping.
+    if row["story_id"] is None or (row["article_count"] or 0) <= 1:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Article is not part of a story yet",
@@ -176,14 +173,17 @@ def list_stories(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> StoryPage:
+    # A story only counts once a second article has joined it — a lone
+    # article "story" is just clustering bookkeeping, not a real story.
     total = database.execute(
-        "SELECT COUNT(*) FROM stories"
+        "SELECT COUNT(*) FROM stories WHERE article_count > 1"
     ).fetchone()[0]
 
     rows = database.execute(
         """
-        SELECT story_id, created_at, updated_at, article_count
+        SELECT story_id, created_at, updated_at, article_count, label
         FROM stories
+        WHERE article_count > 1
         ORDER BY updated_at DESC
         LIMIT ?
         OFFSET ?
@@ -212,9 +212,10 @@ def get_story(
 ) -> StoryDetail:
     story = database.execute(
         """
-        SELECT story_id, created_at, updated_at, article_count
+        SELECT story_id, created_at, updated_at, article_count, label
         FROM stories
         WHERE story_id = ?
+          AND article_count > 1
         """,
         (story_id,),
     ).fetchone()
@@ -228,10 +229,11 @@ def get_story(
     rows = database.execute(
         f"""
         SELECT
-            {_ARTICLE_SUMMARY_COLUMNS}
+            {ARTICLE_SUMMARY_COLUMNS}
         FROM articles
-        WHERE story_id = ?
-        ORDER BY article_id DESC
+        {ARTICLE_SUMMARY_JOIN}
+        WHERE articles.story_id = ?
+        ORDER BY articles.article_id DESC
         """,
         (story_id,),
     ).fetchall()
@@ -254,7 +256,7 @@ def list_story_articles(
     database: Database,
 ) -> list[ArticleSummary]:
     story_exists = database.execute(
-        "SELECT 1 FROM stories WHERE story_id = ?",
+        "SELECT 1 FROM stories WHERE story_id = ? AND article_count > 1",
         (story_id,),
     ).fetchone()
 
@@ -267,10 +269,11 @@ def list_story_articles(
     rows = database.execute(
         f"""
         SELECT
-            {_ARTICLE_SUMMARY_COLUMNS}
+            {ARTICLE_SUMMARY_COLUMNS}
         FROM articles
-        WHERE story_id = ?
-        ORDER BY article_id DESC
+        {ARTICLE_SUMMARY_JOIN}
+        WHERE articles.story_id = ?
+        ORDER BY articles.article_id DESC
         """,
         (story_id,),
     ).fetchall()

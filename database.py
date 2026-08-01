@@ -123,6 +123,13 @@ def setup_database() -> None:
             "story_id INTEGER REFERENCES stories(story_id)",
         )
 
+        _add_column_if_missing(
+            cursor,
+            "stories",
+            "label",
+            "label TEXT",
+        )
+
         cursor.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_articles_story_id

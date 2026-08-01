@@ -1,5 +1,7 @@
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import aiohttp
 import trafilatura
@@ -19,6 +21,33 @@ class ScrapedArticle:
     published: str | None
     clean_text: str
     language: str | None = None
+
+
+def _normalize_published(raw: str | None) -> str | None:
+    """Feeds hand back dates in whatever format they please (usually
+    RFC 2822, sometimes ISO 8601). Normalize to a UTC ISO 8601 string so
+    date-range search can compare published dates lexicographically;
+    fall back to the raw value if it can't be parsed."""
+    if not raw:
+        return raw
+
+    parsed: datetime | None
+
+    try:
+        parsed = parsedate_to_datetime(raw)
+    except (TypeError, ValueError):
+        parsed = None
+
+    if parsed is None:
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            return raw
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+
+    return parsed.astimezone(timezone.utc).isoformat()
 
 
 async def fetch_html(
@@ -109,7 +138,7 @@ async def extract_article(
     return ScrapedArticle(
         url=article.url,
         title=title,
-        published=article.published,
+        published=_normalize_published(article.published),
         clean_text=clean_text,
     )
 

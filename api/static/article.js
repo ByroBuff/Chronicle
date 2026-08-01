@@ -39,6 +39,7 @@ async function loadSimilar(){
     el.innerHTML = data.items.map(s => `
       <div class="sim-item">
         <a href="/dashboard/article/${s.article_id}">${esc(articleTitle(s))}</a>
+        <span class="domain">${esc(s.domain || "—")}</span>
         <span class="sim-score">${Math.round(s.similarity * 100)}%</span>
       </div>`).join("");
   }catch(e){
@@ -55,7 +56,7 @@ async function loadStory(){
 
     $("storySection").hidden = false;
     $("storyMeta").textContent =
-      `${story.article_count} article${story.article_count === 1 ? "" : "s"} · updated ${new Date(story.updated_at).toLocaleString()}`;
+      `${story.label ? story.label + " · " : ""}${story.article_count} article${story.article_count === 1 ? "" : "s"} · updated ${new Date(story.updated_at).toLocaleString()}`;
     $("storyLink").href = `/dashboard/story/${story.story_id}`;
 
     $("storyArticles").innerHTML = renderArticleRows(others);

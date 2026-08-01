@@ -42,6 +42,7 @@ function renderArticleRows(items, isNewFn){
     return `<div class="art${flash}">
       <span class="id">#${a.article_id}</span>
       <span class="t"><a href="/dashboard/article/${a.article_id}">${esc(articleTitle(a))}</a></span>
+      <span class="domain">${esc(a.domain || "—")}</span>
       <span class="badges">${articleBadges(a)}</span>
       <span class="d">${esc(a.published ?? "—")}</span>
     </div>`;

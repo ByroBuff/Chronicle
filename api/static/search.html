@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chronicle · advanced search</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/dashboard/style.css" />
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <h1>CHRONICLE</h1><span>advanced search</span>
+    </div>
+    <a class="back-link" href="/dashboard/">← back to dashboard</a>
+  </header>
+
+  <section class="panel">
+    <h2>Search articles</h2>
+    <form class="search-form" id="searchForm">
+      <label>Title contains
+        <input type="text" id="fTitle" placeholder="e.g. election" />
+      </label>
+      <label>Text contains
+        <input type="text" id="fText" placeholder="e.g. supply chain" />
+      </label>
+      <label>News domain
+        <input type="text" id="fDomain" placeholder="e.g. bbc.com" />
+      </label>
+      <label>Language
+        <input type="text" id="fLanguage" placeholder="e.g. en" />
+      </label>
+      <label>Published from
+        <input type="date" id="fFrom" />
+      </label>
+      <label>Published to
+        <input type="date" id="fTo" />
+      </label>
+      <div class="search-actions">
+        <button type="submit" id="searchBtn">Search</button>
+        <button type="button" id="searchReset">Clear</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Results <span class="eyebrow" id="resultCount"></span></h2>
+    <div id="searchResults"><div class="empty">enter search criteria above and hit search</div></div>
+    <div class="pager" id="searchPager"></div>
+  </section>
+
+</div>
+
+<script src="/dashboard/common.js"></script>
+<script src="/dashboard/search.js"></script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
@@ -11,6 +12,7 @@ from starlette.responses import Response
 
 from api.database import get_database
 from api.ingest import router as ingest_router
+from api.queries import ARTICLE_SUMMARY_COLUMNS, ARTICLE_SUMMARY_JOIN
 from api.models import (
     ArticleDetail,
     ArticlePage,
@@ -107,6 +109,17 @@ def dashboard_entity_page(entity_id: int) -> FileResponse:
     )
 
 
+@app.get(
+    "/dashboard/search",
+    include_in_schema=False,
+)
+def dashboard_search_page() -> FileResponse:
+    return FileResponse(
+        os.path.join(_static_dir, "search.html"),
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 app.mount(
     "/dashboard",
     NoCacheStaticFiles(directory=_static_dir, html=True),
@@ -142,6 +155,37 @@ def health(database: Database) -> dict:
         ) from exc
 
 
+def _exclusive_upper_bound(date_value: str) -> str:
+    """Turn a plain YYYY-MM-DD date into the start of the following day,
+    so a date_to filter includes every timestamp on that day. Values that
+    aren't a bare date (e.g. already a full timestamp) pass through
+    unchanged and are compared as-is."""
+    try:
+        parsed = datetime.strptime(date_value, "%Y-%m-%d")
+    except ValueError:
+        return date_value
+
+    return (parsed + timedelta(days=1)).strftime("%Y-%m-%d")
+
+
+def _domain_url_patterns(domain: str) -> list[str]:
+    cleaned = (
+        domain.strip()
+        .lower()
+        .removeprefix("http://")
+        .removeprefix("https://")
+        .removeprefix("www.")
+        .split("/")[0]
+    )
+
+    return [
+        f"%://{cleaned}",
+        f"%://{cleaned}/%",
+        f"%://www.{cleaned}",
+        f"%://www.{cleaned}/%",
+    ]
+
+
 @app.get(
     "/api/articles",
     response_model=ArticlePage,
@@ -151,6 +195,12 @@ def list_articles(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
     query: Annotated[str | None, Query(alias="q")] = None,
+    title: Annotated[str | None, Query()] = None,
+    text: Annotated[str | None, Query()] = None,
+    domain: Annotated[str | None, Query()] = None,
+    language: Annotated[str | None, Query()] = None,
+    date_from: Annotated[str | None, Query()] = None,
+    date_to: Annotated[str | None, Query()] = None,
 ) -> ArticlePage:
     conditions: list[str] = []
     parameters: list[object] = []
@@ -174,6 +224,34 @@ def list_articles(
             ]
         )
 
+    if title:
+        conditions.append("articles.title LIKE ?")
+        parameters.append(f"%{title.strip()}%")
+
+    if text:
+        conditions.append("articles.clean_text LIKE ?")
+        parameters.append(f"%{text.strip()}%")
+
+    if language:
+        conditions.append("articles.language = ?")
+        parameters.append(language.strip().lower())
+
+    if domain:
+        patterns = _domain_url_patterns(domain)
+
+        conditions.append(
+            "(" + " OR ".join(["articles.url LIKE ?"] * len(patterns)) + ")"
+        )
+        parameters.extend(patterns)
+
+    if date_from:
+        conditions.append("articles.published >= ?")
+        parameters.append(date_from.strip())
+
+    if date_to:
+        conditions.append("articles.published < ?")
+        parameters.append(_exclusive_upper_bound(date_to.strip()))
+
     where_clause = ""
 
     if conditions:
@@ -191,18 +269,9 @@ def list_articles(
     rows = database.execute(
         f"""
         SELECT
-            article_id,
-            url,
-            title,
-            published,
-            language,
-            story_id,
-            SUBSTR(
-                REPLACE(clean_text, CHAR(10), ' '),
-                1,
-                300
-            ) AS excerpt
+            {ARTICLE_SUMMARY_COLUMNS}
         FROM articles
+        {ARTICLE_SUMMARY_JOIN}
         {where_clause}
         ORDER BY article_id DESC
         LIMIT ?
@@ -237,15 +306,20 @@ def get_article(
     article = database.execute(
         """
         SELECT
-            article_id,
-            url,
-            title,
-            published,
-            clean_text,
-            language,
-            story_id
+            articles.article_id,
+            articles.url,
+            articles.title,
+            articles.published,
+            articles.clean_text,
+            articles.language,
+            CASE
+                WHEN stories.article_count > 1 THEN articles.story_id
+                ELSE NULL
+            END AS story_id
         FROM articles
-        WHERE article_id = ?
+        LEFT JOIN stories
+            ON stories.story_id = articles.story_id
+        WHERE articles.article_id = ?
         """,
         (article_id,),
     ).fetchone()
@@ -422,22 +496,13 @@ def list_entity_articles(
     ).fetchone()[0]
 
     rows = database.execute(
-        """
+        f"""
         SELECT
-            articles.article_id,
-            articles.url,
-            articles.title,
-            articles.published,
-            articles.language,
-            articles.story_id,
-            SUBSTR(
-                REPLACE(articles.clean_text, CHAR(10), ' '),
-                1,
-                300
-            ) AS excerpt
+            {ARTICLE_SUMMARY_COLUMNS}
         FROM articles
         INNER JOIN article_entities
             ON article_entities.article_id = articles.article_id
+        {ARTICLE_SUMMARY_JOIN}
         WHERE article_entities.entity_id = ?
         ORDER BY articles.article_id DESC
         LIMIT ?

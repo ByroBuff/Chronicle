@@ -1,4 +1,11 @@
-from pydantic import BaseModel, Field
+from urllib.parse import urlsplit
+
+from pydantic import BaseModel, Field, computed_field
+
+
+def _domain_from_url(url: str) -> str:
+    host = urlsplit(url).hostname or ""
+    return host.removeprefix("www.")
 
 
 class EntitySummary(BaseModel):
@@ -17,6 +24,11 @@ class ArticleSummary(BaseModel):
     language: str | None = None
     story_id: int | None = None
 
+    @computed_field
+    @property
+    def domain(self) -> str:
+        return _domain_from_url(self.url)
+
 
 class ArticleDetail(BaseModel):
     article_id: int
@@ -27,6 +39,11 @@ class ArticleDetail(BaseModel):
     language: str | None = None
     story_id: int | None = None
     entities: list[EntitySummary] = Field(default_factory=list)
+
+    @computed_field
+    @property
+    def domain(self) -> str:
+        return _domain_from_url(self.url)
 
 
 class ArticlePage(BaseModel):
@@ -58,6 +75,11 @@ class SimilarArticle(BaseModel):
     excerpt: str | None
     similarity: float
 
+    @computed_field
+    @property
+    def domain(self) -> str:
+        return _domain_from_url(self.url)
+
 
 class SimilarArticlesResponse(BaseModel):
     article_id: int
@@ -69,6 +91,7 @@ class StorySummary(BaseModel):
     created_at: str
     updated_at: str
     article_count: int
+    label: str | None = None
 
 
 class StoryDetail(StorySummary):

@@ -145,7 +145,7 @@ function renderStories(items){
   }
   el.innerHTML = items.map(s => `
     <div class="story-row">
-      <a href="/dashboard/story/${s.story_id}">Story #${s.story_id}</a>
+      <a href="/dashboard/story/${s.story_id}">${esc(s.label || `Story #${s.story_id}`)}</a>
       <span class="count">${s.article_count} article${s.article_count === 1 ? "" : "s"}</span>
       <span class="time">${new Date(s.updated_at).toLocaleString()}</span>
     </div>`).join("");
